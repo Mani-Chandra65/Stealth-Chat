@@ -1,8 +1,18 @@
 import 'dotenv/config';
 
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import { Pool } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import * as schema from './schema/index.js';
 
-const sql = neon(process.env.DATABASE_URL);
+const connectionString = process.env.POSTGRESSQL_URL;
 
-export const db = drizzle(sql);
+export const getDb = () => {
+        if (!connectionString) {
+                throw new Error('POSTGRESSQL_URL is required to access the database');
+        }
+
+        const pool = new Pool({ connectionString });
+        return drizzle(pool, { schema });
+};
+
+export const db = connectionString ? getDb() : null;

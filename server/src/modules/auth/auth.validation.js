@@ -1,18 +1,11 @@
 import { z } from "zod";
 
 export const registerSchema = z.object({
-  username: z
-    .string()
-    .min(3)
-    .max(30),
-
-  email: z
-    .email(),
-
-  password: z
-    .string()
-    .min(8)
-    .max(128)
+  user_name: z.string().min(3).max(30),
+  email: z.email(),
+  passwordHash: z.string().min(1),
+  publicKey: z.string().min(1),
+  encryptedPrivateKey: z.string().min(1)
 });
 
 export const loginSchema = z.object({

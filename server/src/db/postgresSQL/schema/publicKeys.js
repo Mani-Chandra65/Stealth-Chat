@@ -6,7 +6,7 @@ import {
   timestamp,
   boolean
 } from "drizzle-orm/pg-core";
-import { users } from "./users";
+import { users } from "./users.js";
 
 export const publicKeys = pgTable('public_keys', {
     user_id: uuid('user_id')
@@ -19,4 +19,6 @@ export const publicKeys = pgTable('public_keys', {
     public_key: text('public_key')
         .notNull(),
     
+    encrypted_private_key: text('encrypted_private_key')
+        .notNull(),
 })

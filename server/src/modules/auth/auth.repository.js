@@ -1,0 +1,43 @@
+import { db } from '../../db/postgresSQL/index.js';
+import { auth, users, publicKeys} from '../../db/postgresSQL/schema/index.js';
+
+export const findUserByEmail = async (email) => {
+    const user = await db.query.users.findFirst({
+        where: (users, { eq }) => eq(users.email, email)
+    });
+    return user;
+};
+
+export const findUserByUsername = async (username) => {
+    const user = await db.query.users.findFirst({
+        where: (users, { eq }) => eq(users.username, username)
+    });
+    return user;
+}
+
+export const createUserWithAuth = async ({
+    username,
+    email,
+    passwordHash,
+    publicKey,
+    encryptedPrivateKey
+}) => {
+    return db.transaction(async (tx) => {
+        const [user] = await tx.insert(users).values({
+            username,
+            email,
+        }).returning();
+
+        await tx.insert(auth).values({
+            user_id: user.id,
+            password_hash: passwordHash
+        });
+        
+        await tx.insert(publicKeys).values({
+            user_id: user.id,
+            public_key: publicKey,
+            encrypted_private_key: encryptedPrivateKey
+        });
+        return user;
+    });
+};

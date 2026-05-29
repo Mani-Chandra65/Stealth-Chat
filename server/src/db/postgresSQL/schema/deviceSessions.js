@@ -4,7 +4,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { users } from "./users";
+import { users } from "./users.js";
 
 export const deviceSessions = pgTable("device_sessions", {
   session_id: uuid("session_id")

@@ -5,7 +5,7 @@ import {
   boolean,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { users } from "./users";
+import { users } from "./users.js";
 
 export const notifications = pgTable("notifications", {
   notification_id: uuid("notification_id")

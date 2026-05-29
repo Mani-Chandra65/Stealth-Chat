@@ -7,8 +7,8 @@ import {
   primaryKey,
   boolean
 } from "drizzle-orm/pg-core";
-import { groups } from "./groups";
-import { users } from "./users";
+import { groups } from "./groups.js";
+import { users } from "./users.js";
 
 export const groupMembers = pgTable('group_members',{
     group_id: uuid('group_id')

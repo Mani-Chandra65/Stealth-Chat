@@ -7,8 +7,8 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import { users } from "./users";
-import { connections } from "./connections";
+import { users } from "./users.js";
+import { connections } from "./connections.js";
 
 export const messages = pgTable("messages", {
   message_id: uuid("message_id")
