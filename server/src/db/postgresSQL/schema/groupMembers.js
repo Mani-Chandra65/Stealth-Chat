@@ -4,6 +4,7 @@ import {
   varchar,
   text,
   timestamp,
+  primaryKey,
   boolean
 } from "drizzle-orm/pg-core";
 import { groups } from "./groups";
@@ -12,7 +13,6 @@ import { users } from "./users";
 export const groupMembers = pgTable('group_members',{
     group_id: uuid('group_id')
         .notNull()
-        .primaryKey()
         .references(()=> groups.group_id, {
             onDelete:'cascade',
         }),
@@ -31,4 +31,8 @@ export const groupMembers = pgTable('group_members',{
     joined_at: timestamp("joined_at")
         .notNull()
         .defaultNow(),
-})
+}, (table) => ({
+  pk: primaryKey({
+    columns: [table.group_id, table.user_id]
+  })
+}))

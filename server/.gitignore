@@ -2,6 +2,7 @@
 node_modules/
 package-lock.json
 yarn.lock
+drizzle/
 
 # Environment variables
 .env
@@ -36,3 +37,6 @@ coverage/
 # Build output
 dist/
 build/
+
+#temp files
+checklist.txt
