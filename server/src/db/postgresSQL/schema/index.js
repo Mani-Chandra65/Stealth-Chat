@@ -6,4 +6,5 @@ export * from "./groups";
 export * from "./groupMembers";
 export * from "./messages";
 export * from "./notifications";
-export * from "./sessions";
+export * from "./deviceSessions";
+export * from "./reactions";

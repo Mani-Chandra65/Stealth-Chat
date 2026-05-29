@@ -35,7 +35,10 @@ export const messages = pgTable("messages", {
 
   media_url: text("media_url"),
 
-  reply_to: uuid("reply_to"),
+  reply_to: uuid("reply_to")
+    .references(() => messages.message_id,{
+      onDelete:"cascade",
+    }),
 
   edited: boolean("edited")
     .notNull()

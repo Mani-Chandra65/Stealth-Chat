@@ -36,3 +36,6 @@ coverage/
 # Build output
 dist/
 build/
+
+#temp files
+checklist.txt

@@ -13,7 +13,7 @@ export const publicKeys = pgTable('public_keys', {
         .notNull()
         .primaryKey()
         .references(()=> users.id, {
-            onDelete:cascade,
+            onDelete:"cascade",
     }),
 
     public_key: text('public_key')
