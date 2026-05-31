@@ -1,5 +1,6 @@
 import { db } from '../../db/postgresSQL/index.js';
-import { auth, users, publicKeys} from '../../db/postgresSQL/schema/index.js';
+import { eq } from 'drizzle-orm';
+import { auth, users, publicKeys, deviceSessions } from '../../db/postgresSQL/schema/index.js';
 
 export const findUserByEmail = async (email) => {
     const user = await db.query.users.findFirst({
@@ -40,4 +41,32 @@ export const createUserWithAuth = async ({
         });
         return user;
     });
+};
+export const findUserAuthDetailsByEmail = async (email) => {
+    const result = await db.select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        password_hash: auth.password_hash,
+        public_key: publicKeys.public_key,
+        encrypted_private_key: publicKeys.encrypted_private_key
+    })
+    .from(users)
+    .innerJoin(auth, eq(users.id, auth.user_id))
+    .innerJoin(publicKeys, eq(users.id, publicKeys.user_id))
+    .where(eq(users.email, email))
+    .limit(1);
+    
+    return result[0];
+};
+
+export const createDeviceSession = async ({ user_id, device_name, ip_address, refresh_token_hash, expires_at }) => {
+    const [session] = await db.insert(deviceSessions).values({
+        user_id,
+        device_name,
+        ip_address,
+        refresh_token_hash,
+        expires_at
+    }).returning();
+    return session;
 };
