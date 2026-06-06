@@ -1,5 +1,5 @@
 import { db } from '../../db/postgresSQL/index.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { auth, users, publicKeys, deviceSessions } from '../../db/postgresSQL/schema/index.js';
 
 export const findUserByEmail = async (email) => {
@@ -47,6 +47,7 @@ export const findUserAuthDetailsByEmail = async (email) => {
         id: users.id,
         username: users.username,
         email: users.email,
+        is_deleted: users.isDeleted,
         password_hash: auth.password_hash,
         public_key: publicKeys.public_key,
         encrypted_private_key: publicKeys.encrypted_private_key
@@ -54,7 +55,7 @@ export const findUserAuthDetailsByEmail = async (email) => {
     .from(users)
     .innerJoin(auth, eq(users.id, auth.user_id))
     .innerJoin(publicKeys, eq(users.id, publicKeys.user_id))
-    .where(eq(users.email, email))
+    .where(and(eq(users.email, email), eq(users.isDeleted, false)))
     .limit(1);
     
     return result[0];
@@ -69,4 +70,25 @@ export const createDeviceSession = async ({ user_id, device_name, ip_address, re
         expires_at
     }).returning();
     return session;
+};
+
+export const findDeviceSessionByHash = async (hash) => {
+    const session = await db.query.deviceSessions.findFirst({
+        where: (deviceSessions, { and, eq, isNull }) => and(
+            eq(deviceSessions.refresh_token_hash, hash),
+            isNull(deviceSessions.revoked_at)
+        )
+    });
+    return session;
+};
+
+export const deleteDeviceSession = async (hash) => {
+    await db.delete(deviceSessions).where(eq(deviceSessions.refresh_token_hash, hash));
+};
+
+export const findUserById = async (id) => {
+    const user = await db.query.users.findFirst({
+        where: (users, { and, eq }) => and(eq(users.id, id), eq(users.isDeleted, false))
+    });
+    return user;
 };

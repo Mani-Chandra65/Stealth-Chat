@@ -6,18 +6,20 @@ import { hashPassword } from '../../utils/crypto/hashPassword.js';
 import { getEncryptedPrivateKey } from '../../utils/indexedDB.js';
 import { decryptPrivateKey } from '../../utils/crypto/decryptPrivateKey.js';
 import { setPrivateKey } from '../../store/cryptoStore.js';
+import { useAuthStore } from '../../store/authStore.js';
 
 export default function UnlockVault({ onUnlock }) {
   const { register, handleSubmit, formState: { errors } } = useForm();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Directly pull user from the global state 
+  const user = useAuthStore(state => state.user);
 
   const onSubmit = async (data) => {
     setIsLoading(true);
     try {
-      const userStr = sessionStorage.getItem('user');
-      if (!userStr) throw new Error("User session data missing");
-      const user = JSON.parse(userStr);
+      if (!user) throw new Error("User session data missing from store");
 
       const passwordHash = await hashPassword(data.password, user.email);
       const encryptedKeyStr = await getEncryptedPrivateKey(user.id);

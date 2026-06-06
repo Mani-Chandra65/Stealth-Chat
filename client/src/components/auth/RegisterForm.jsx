@@ -184,6 +184,17 @@ export default function RegisterForm() {
             'Register'
           )}
         </button>
+
+        <p className="mt-4 text-center text-sm text-gray-600">
+          Already a user?{' '}
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="font-medium text-blue-600 hover:text-blue-500"
+          >
+            Login
+          </button>
+        </p>
       </form>
     </div>
   );

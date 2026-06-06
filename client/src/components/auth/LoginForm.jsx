@@ -18,7 +18,7 @@ export default function LoginForm() {
       
       reset();
       toast.success('Login successful!');
-      navigate('/home'); // or wherever they go after login
+      navigate('/'); // Go directly to dashboard root which auto-redirects to /chats
     } catch (err) {
       toast.error(err.message || 'Login failed');
     }
@@ -119,6 +119,17 @@ export default function LoginForm() {
             'Login'
           )}
         </button>
+
+        <p className="mt-4 text-center text-sm text-gray-600">
+          New to Stealth Chat?{' '}
+          <button
+            type="button"
+            onClick={() => navigate('/register')}
+            className="font-medium text-blue-600 hover:text-blue-500"
+          >
+            Register
+          </button>
+        </p>
       </form>
     </div>
   );

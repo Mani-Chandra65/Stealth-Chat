@@ -22,6 +22,28 @@ export const users = pgTable("users", {
 
   bio: text("bio"),
 
+  showLastSeen: boolean("show_last_seen")
+    .default(true)
+    .notNull(),
+
+  showOnlineStatus: boolean("show_online_status")
+    .default(true)
+    .notNull(),
+
+  readReceipts: boolean("read_receipts")
+    .default(true)
+    .notNull(),
+
+  allowConnectionRequests: boolean("allow_connection_requests")
+    .default(true)
+    .notNull(),
+
+  isDeleted: boolean("is_deleted")
+    .default(false)
+    .notNull(),
+
+  deletedAt: timestamp("deleted_at"),
+
   createdAt: timestamp("created_at")
     .defaultNow()
     .notNull(),

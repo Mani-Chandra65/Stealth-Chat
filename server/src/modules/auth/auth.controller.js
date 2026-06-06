@@ -15,6 +15,33 @@ export const register = async (req,res,next)=>{
             }
         });
     } catch (error) {
+        if (error.code === 'EMAIL_EXISTS') {
+            return res.status(409).json({
+                success: false,
+                error: error.message,
+                field: 'email'
+            });
+        }
+
+        if (error.code === 'USERNAME_EXISTS') {
+            return res.status(409).json({
+                success: false,
+                error: error.message,
+                field: 'username'
+            });
+        }
+
+        if (error.code === '23505') {
+            const isEmailConflict = error.constraint?.includes('email');
+            return res.status(409).json({
+                success: false,
+                error: isEmailConflict
+                    ? 'A user with this email already exists. Contact the owner if you think this is a problem.'
+                    : 'A user with this username already exists.',
+                field: isEmailConflict ? 'email' : 'username'
+            });
+        }
+
         next(error);
     }
 };
@@ -47,3 +74,37 @@ export const login = async (req,res,next) => {
         next(error);
     }
 }
+
+export const refreshToken = async (req, res, next) => {
+    try {
+        const { refreshToken } = req.cookies;
+        
+        if (!refreshToken) {
+            return res.status(401).json({ success: false, message: 'Refresh token missing' });
+        }
+
+        const data = await authService.refreshAuthToken(refreshToken);
+
+        res.status(200).json({
+            success: true,
+            accessToken: data.accessToken,
+            user: data.user
+        });
+    } catch (error) {
+        res.clearCookie('refreshToken');
+        res.status(401).json({ success: false, message: 'Invalid refresh token' });
+    }
+};
+
+export const logout = async (req, res, next) => {
+    try {
+        const { refreshToken } = req.cookies;
+        
+        await authService.logout(refreshToken);
+        res.clearCookie('refreshToken');
+        
+        res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        next(error);
+    }
+};

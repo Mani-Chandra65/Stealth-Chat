@@ -4,10 +4,14 @@ import { hashPassword } from '../utils/crypto/hashPassword.js';
 import { saveEncryptedPrivateKey, savePublicKey } from '../utils/indexedDB.js';
 import { decryptPrivateKey } from '../utils/crypto/decryptPrivateKey.js';
 import { setPrivateKey } from '../store/cryptoStore.js';
+import { useAuthStore } from '../store/authStore.js';
 
 export const useLogin = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Attach directly to the Zustand store login dispatcher
+  const authLogin = useAuthStore(state => state.login);
 
   const login = async (email, password) => {
     setIsLoading(true);
@@ -25,9 +29,8 @@ export const useLogin = () => {
       const response = await authService.login(requestBody);
 
       if (response && response.accessToken) {
-        // 1. Store the ephemeral JWT into sessionStorage 
-        sessionStorage.setItem('accessToken', response.accessToken);
-        sessionStorage.setItem('user', JSON.stringify(response.user));
+        // 1. Utilize Zustand strictly as the authoritative memory scope
+        authLogin(response.user, response.accessToken);
 
         // 2. Store the encrypted private key and public key in IndexedDB
         if (response.user?.id) {
