@@ -38,5 +38,3 @@ coverage/
 dist/
 build/
 
-#temp files
-checklist.txt

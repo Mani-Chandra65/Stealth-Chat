@@ -1,8 +1,10 @@
 import { users } from "../../db/postgresSQL/schema/users.js";
 import { auth } from "../../db/postgresSQL/schema/auth.js";
 import { deviceSessions } from "../../db/postgresSQL/schema/deviceSessions.js";
+import { connections } from "../../db/postgresSQL/schema/connections.js";
+import { publicKeys } from "../../db/postgresSQL/schema/publicKeys.js";
 import { db } from "../../db/postgresSQL/index.js";
-import { and, ilike, eq } from "drizzle-orm";
+import { and, ilike, eq, or } from "drizzle-orm";
 
 const settingsFields = {
   showLastSeen: users.showLastSeen,
@@ -70,7 +72,27 @@ export const getUserProfile = async (req, res) => {
       delete user.email;
     }
 
-    return res.status(200).json(user);
+    let connection = null;
+    if (requesterUsername !== user.username && req.user?.userId) {
+      const conn = await db.query.connections.findFirst({
+        where: (connections, { or, and, eq }) => or(
+          and(eq(connections.user1_id, req.user.userId), eq(connections.user2_id, user.id)),
+          and(eq(connections.user1_id, user.id), eq(connections.user2_id, req.user.userId))
+        )
+      });
+      if (conn) {
+        connection = {
+          connectionId: conn.connection_id,
+          status: conn.status,
+          senderId: conn.user1_id
+        };
+      }
+    }
+
+    return res.status(200).json({
+      ...user,
+      connection
+    });
   } catch (error) {
     console.error("Get user profile error:", error);
     return res.status(500).json({ error: "Internal server error" });
@@ -338,6 +360,31 @@ export const deleteUserAccount = async (req, res) => {
     return res.status(200).json({ success: true, message: "Account marked as deleted" });
   } catch (error) {
     console.error("Delete user account error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getUserPublicKeyEndpoint = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!db) {
+      return res.status(500).json({ error: "Database connection not available" });
+    }
+
+    const [pkRecord] = await db
+      .select({ publicKey: publicKeys.public_key })
+      .from(publicKeys)
+      .where(eq(publicKeys.user_id, userId))
+      .limit(1);
+
+    if (!pkRecord) {
+      return res.status(404).json({ error: "Public key not found for this user" });
+    }
+
+    return res.status(200).json(pkRecord);
+  } catch (error) {
+    console.error("Get user public key error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };

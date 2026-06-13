@@ -2,9 +2,10 @@ import { useEffect } from 'react';
 import { SESSION_HINT_KEY, useAuthStore } from '../../store/authStore.js';
 import axios from 'axios';
 import { getPrivateKey } from '../../store/cryptoStore.js';
+import { connectSocket } from '../../lib/socket.js';
 
 const apiClient = axios.create({
-  baseURL: '/api/v1',
+  baseURL: (import.meta.env.VITE_API_URL || '') + '/api/v1',
   withCredentials: true
 });
 
@@ -34,6 +35,7 @@ export default function AuthProvider({ children }) {
         
         if (response.data.accessToken && response.data.user) {
            login(response.data.user, response.data.accessToken);
+           connectSocket(response.data.accessToken);
         } else {
            await clearAuth();
         }

@@ -42,7 +42,7 @@ export default function UnlockVault({ onUnlock }) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+    <div className="flex items-center justify-center min-h-dvh bg-gray-50">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
         <div className="flex flex-col items-center justify-center text-center">
           <div className="p-3 mb-4 bg-blue-100 rounded-full">

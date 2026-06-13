@@ -19,7 +19,7 @@ export default function ProtectedRoute({ children }) {
   // Prevent flashing the login screen or vault while verifying the refresh token
   if (isInitializing) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-500">
+      <div className="flex items-center justify-center min-h-dvh bg-gray-50 text-gray-500">
         Authenticating...
       </div>
     );

@@ -2,9 +2,12 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Check, X, MessageSquare } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
-import { sendConnectionRequest } from "../../services/user.connection"
+import { getSocket } from "../../lib/socket.js";
+import { getPublicKey } from "../../utils/indexedDB.js";
+import { generateAndEncryptAESKeys } from "../../utils/crypto/keyExchange.js";
+import { setChatKey } from "../../store/cryptoStore.js";
 
 export default function Profile() {
   const { username } = useParams();
@@ -83,18 +86,103 @@ export default function Profile() {
     }
   };
 
-  const handleConnect = async () => {
-    try {
-      const response =await sendConnectionRequest(targetUsername, accessToken);
+  const handleConnect = () => {
+    if (!userProfile?.id) return;
+    const socket = getSocket();
+    if (!socket) {
+      toast.error("Not connected to server");
+      return;
+    }
+    socket.emit("connection:send-request", { receiverId: userProfile.id }, (response) => {
       if (response.success) {
         toast.success(response.message || "Connection request sent!");
+        setUserProfile(prev => ({
+          ...prev,
+          connection: {
+            connectionId: response.connection.connection_id,
+            status: "pending",
+            senderId: currentUser.id
+          }
+        }));
       } else {
-        toast.error(response.message || "Failed to send connection request.");
+        toast.error(response.error || "Failed to send request");
       }
-    } catch (err) {
-      console.error("Error sending connection request:", err);
-      toast.error(err.response?.data?.error || "An error occurred while sending the connection request.");
+    });
+  };
+
+  const handleAccept = async () => {
+    if (!userProfile?.connection?.connectionId || !userProfile?.id) return;
+    const socket = getSocket();
+    if (!socket) {
+      toast.error("Not connected to server");
+      return;
     }
+
+    const toastId = toast.loading("Performing key exchange...");
+
+    try {
+      // 1. Fetch peer public key
+      const peerPublicKeyRes = await axios.get(`/api/v1/users/public-key/${userProfile.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const peerPublicKey = peerPublicKeyRes.data.publicKey;
+
+      // 2. Fetch our own public key
+      const myPublicKey = await getPublicKey(currentUser.id);
+
+      if (!peerPublicKey || !myPublicKey) {
+        throw new Error("Could not retrieve public keys for exchange");
+      }
+
+      // 3. Generate symmetric AES key and encrypt for both
+      const { aesKey, encryptedAESKeyUser1, encryptedAESKeyUser2 } = await generateAndEncryptAESKeys(peerPublicKey, myPublicKey);
+
+      // 4. Emit accept request
+      socket.emit("connection:accept-request", {
+        connectionId: userProfile.connection.connectionId,
+        encryptedAESKeyUser1,
+        encryptedAESKeyUser2
+      }, (response) => {
+        toast.dismiss(toastId);
+        if (response.success) {
+          toast.success("Connection accepted!");
+          setChatKey(userProfile.connection.connectionId, aesKey);
+          setUserProfile(prev => ({
+            ...prev,
+            connection: {
+              ...prev.connection,
+              status: "accepted"
+            }
+          }));
+        } else {
+          toast.error(response.error || "Failed to accept request");
+        }
+      });
+    } catch (err) {
+      toast.dismiss(toastId);
+      console.error("Key exchange failed:", err);
+      toast.error(err.message || "Failed to perform key exchange");
+    }
+  };
+
+  const handleReject = () => {
+    if (!userProfile?.connection?.connectionId) return;
+    const socket = getSocket();
+    if (!socket) {
+      toast.error("Not connected to server");
+      return;
+    }
+    socket.emit("connection:reject-request", { connectionId: userProfile.connection.connectionId }, (response) => {
+      if (response.success) {
+        toast.success(response.message || "Connection rejected!");
+        setUserProfile(prev => ({
+          ...prev,
+          connection: null
+        }));
+      } else {
+        toast.error(response.error || "Failed to reject request");
+      }
+    });
   };
 
   if (loading) {
@@ -202,10 +290,52 @@ export default function Profile() {
                     >
                       Edit Profile
                     </button>
+                  ) : !userProfile?.connection ? (
+                    <button
+                      onClick={handleConnect}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors cursor-pointer"
+                    >
+                      <UserPlus size={16} />
+                      Connect
+                    </button>
+                  ) : userProfile.connection.status === "pending" ? (
+                    userProfile.connection.senderId === currentUser?.id ? (
+                      <button
+                        disabled
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 bg-gray-100 text-gray-400 rounded-md"
+                      >
+                        Request Sent
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleAccept}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors cursor-pointer"
+                        >
+                          <Check size={16} />
+                          Accept
+                        </button>
+                        <button
+                          onClick={handleReject}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors cursor-pointer"
+                        >
+                          <X size={16} />
+                          Reject
+                        </button>
+                      </div>
+                    )
+                  ) : userProfile.connection.status === "accepted" ? (
+                    <button
+                      onClick={() => navigate("/chats")}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-100 text-green-800 border border-green-200 rounded-md hover:bg-green-200 transition-colors cursor-pointer"
+                    >
+                      <MessageSquare size={16} />
+                      Message
+                    </button>
                   ) : (
                     <button
                       onClick={handleConnect}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-blue-600 text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors cursor-pointer"
                     >
                       <UserPlus size={16} />
                       Connect

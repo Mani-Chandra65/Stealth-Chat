@@ -28,6 +28,9 @@ export const groupMembers = pgTable('group_members',{
         .notNull()
         .default("member"),
 
+    encrypted_group_key: text("encrypted_group_key")
+        .notNull(),
+
     joined_at: timestamp("joined_at")
         .notNull()
         .defaultNow(),

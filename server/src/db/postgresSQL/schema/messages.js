@@ -33,6 +33,10 @@ export const messages = pgTable("messages", {
 
   encrypted_content: text("encrypted_content"),
 
+  status: varchar("status", { length: 20 })
+    .default("sent")
+    .notNull(),
+
   media_url: text("media_url"),
 
   reply_to: uuid("reply_to")

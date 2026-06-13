@@ -5,6 +5,7 @@ import { saveEncryptedPrivateKey, savePublicKey } from '../utils/indexedDB.js';
 import { decryptPrivateKey } from '../utils/crypto/decryptPrivateKey.js';
 import { setPrivateKey } from '../store/cryptoStore.js';
 import { useAuthStore } from '../store/authStore.js';
+import { connectSocket } from '../lib/socket.js';
 
 export const useLogin = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -49,7 +50,12 @@ export const useLogin = () => {
           if (response.publicKey) {
             await savePublicKey(response.user.id, response.publicKey);
           }
+
         }
+
+      }
+      if (response && response.accessToken) {
+        connectSocket(response.accessToken); // Connect to the socket server with the access token
       }
 
       return response;

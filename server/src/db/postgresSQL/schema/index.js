@@ -9,3 +9,5 @@ export * from "./notifications.js";
 export * from "./deviceSessions.js";
 export * from "./reactions.js";
 export * from "./blockedUsers.js";
+export * from "./groupMessages.js";
+export * from "./groupReactions.js";

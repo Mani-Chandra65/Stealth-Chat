@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { clearPrivateKey } from './cryptoStore.js';
 import { removeEncryptedPrivateKey, removePublicKey } from '../utils/indexedDB.js';
 import axios from 'axios';
+import { disconnectSocket } from '../lib/socket.js';
 
 export const SESSION_HINT_KEY = 'stealth-chat-session';
 
@@ -40,12 +41,12 @@ export const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try {
-      // Call the backend to revoke the HttpOnly cookie and session
+      disconnectSocket(); // Disconnect from the socket server on logout
       await axios.post('/api/v1/auth/logout', {}, { withCredentials: true });
     } catch (error) {
       console.error("Logout error", error);
     } finally {
-      // Regardless of the network result, locally clear the state
+
       await get().clearAuth();
     }
   }
