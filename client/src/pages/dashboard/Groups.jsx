@@ -50,6 +50,7 @@ import {
 
 // Sub-component to download, decrypt, and render media files securely
 function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
+  const accessToken = useAuthStore((state) => state.accessToken);
   const [decryptedUrl, setDecryptedUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -62,6 +63,9 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
 
       // Download the encrypted file bytes via proxy
       const response = await axios.get(`/api/v1/messages/download?url=${encodeURIComponent(mediaUrl)}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        },
         responseType: "arraybuffer"
       });
 
