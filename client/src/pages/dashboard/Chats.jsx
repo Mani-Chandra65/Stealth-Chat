@@ -36,7 +36,9 @@ import {
   Smile,
   RefreshCw,
   ArrowLeft,
-  Play
+  Play,
+  Copy,
+  MoreHorizontal
 } from "lucide-react";
 
 // Sub-component to download, decrypt, and render media files securely
@@ -109,7 +111,7 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
     if (isImage) {
       return (
         <>
-          <div className="rounded-lg overflow-hidden border border-gray-100 max-w-xs shadow-sm bg-white mt-1 cursor-zoom-in hover:brightness-95 transition-all" onClick={() => setIsFullScreen(true)}>
+          <div className="rounded-lg overflow-hidden border border-gray-100 max-w-xs shadow-sm bg-white mt-1 cursor-zoom-in hover:brightness-95 transition-all" onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}>
             <img src={decryptedUrl} alt={filename || "E2EE Attachment"} className="w-full max-h-60 object-cover" />
           </div>
 
@@ -152,7 +154,7 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
     if (isVideo) {
       return (
         <>
-          <div className="relative rounded-lg overflow-hidden border border-gray-100 max-w-xs shadow-sm bg-white mt-1 cursor-zoom-in hover:brightness-95 transition-all" onClick={() => setIsFullScreen(true)}>
+          <div className="relative rounded-lg overflow-hidden border border-gray-100 max-w-xs shadow-sm bg-white mt-1 cursor-zoom-in hover:brightness-95 transition-all" onClick={(e) => { e.stopPropagation(); setIsFullScreen(true); }}>
             <video src={decryptedUrl} className="w-full max-h-60 object-cover" muted playsInline />
             <div className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-all">
               <div className="bg-white/80 rounded-full p-2 text-gray-800 shadow-md">
@@ -202,6 +204,7 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
       <a
         href={decryptedUrl}
         download={filename || "file"}
+        onClick={(e) => e.stopPropagation()}
         className="inline-flex items-center gap-2 py-2.5 px-4 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-semibold rounded-lg border border-green-100 transition-colors mt-1"
       >
         <Download size={14} />
@@ -212,7 +215,10 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
 
   return (
     <button
-      onClick={decryptMedia}
+      onClick={(e) => {
+        e.stopPropagation();
+        decryptMedia();
+      }}
       className="inline-flex items-center gap-2 py-2.5 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg border border-blue-100 transition-colors mt-1 cursor-pointer"
     >
       <Lock size={14} />
@@ -295,11 +301,22 @@ export default function Chats() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [inputText, setInputText] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFilePreview, setSelectedFilePreview] = useState(null);
+
+  useEffect(() => {
+    return () => {
+      if (selectedFilePreview) {
+        URL.revokeObjectURL(selectedFilePreview);
+      }
+    };
+  }, [selectedFilePreview]);
 
   // Real-time peer status
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
+  const [activeActionMessage, setActiveActionMessage] = useState(null);
 
   // References for scrolling and typing debounces
   const messagesEndRef = useRef(null);
@@ -735,73 +752,109 @@ export default function Chats() {
     }, 2000);
   };
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!isVaultUnlocked) {
+      toast.error("Decryption vault is locked. Unlock it in Settings to select secure attachments.");
+      return;
+    }
+
+    setSelectedFile(file);
+    if (file.type.startsWith("image/")) {
+      const objectUrl = URL.createObjectURL(file);
+      setSelectedFilePreview(objectUrl);
+    } else {
+      setSelectedFilePreview(null);
+    }
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!inputText.trim() || !activeChat || !socket) return;
+    if (!activeChat || !socket) return;
+    if (!inputText.trim() && !selectedFile) return;
 
     if (!isVaultUnlocked) {
       toast.error("Decryption vault is locked. Unlock it in Settings to send secure messages.");
       return;
     }
 
-    const textToSend = inputText.trim();
-    setInputText("");
+    // 1. If there is a selected file, encrypt, upload, and send it first
+    if (selectedFile) {
+      const fileToSend = selectedFile;
+      setSelectedFile(null);
+      if (selectedFilePreview) {
+        URL.revokeObjectURL(selectedFilePreview);
+        setSelectedFilePreview(null);
+      }
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
 
-    // Stop typing state immediately
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    socket.emit("typing:stop", { chatId: activeChat.connectionId });
+      await handleMediaUpload(fileToSend);
+    }
 
-    try {
-      // 1. Encrypt message locally using AES symmetric key
-      const ciphertext = await encryptMessageContent(textToSend, activeChat.connectionId);
+    // 2. Send text message if present
+    if (inputText.trim()) {
+      const textToSend = inputText.trim();
+      setInputText("");
 
-      // 2. Emit to socket
-      socket.emit("message:send", {
-        chatId: activeChat.connectionId,
-        ciphertext,
-        messageType: "text",
-        replyTo: replyTo ? replyTo.id : null
-      }, (response) => {
-        if (response.success) {
-          const sentMsg = {
-            id: response.message.messageId,
-            senderId: user.id,
-            messageType: "text",
-            text: textToSend,
-            createdAt: response.message.createdAt,
-            status: response.message.status,
-            replyTo: response.message.replyTo,
-            edited: false,
-            editedAt: null,
-            deletedAt: null,
-            reactions: []
-          };
-          setMessages(prev => [...prev, sentMsg]);
-          setReplyTo(null);
+      // Stop typing state immediately
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      socket.emit("typing:stop", { chatId: activeChat.connectionId });
 
-          // Update lastActivityAt in chats and re-sort
-          setChats(prev => {
-            const updated = prev.map(c => {
-              if (c.connectionId === activeChat.connectionId) {
-                return { ...c, lastActivityAt: response.message.createdAt };
-              }
-              return c;
+      try {
+        // Encrypt message locally using AES symmetric key
+        const ciphertext = await encryptMessageContent(textToSend, activeChat.connectionId);
+
+        // Emit to socket
+        socket.emit("message:send", {
+          chatId: activeChat.connectionId,
+          ciphertext,
+          messageType: "text",
+          replyTo: replyTo ? replyTo.id : null
+        }, (response) => {
+          if (response.success) {
+            const sentMsg = {
+              id: response.message.messageId,
+              senderId: user.id,
+              messageType: "text",
+              text: textToSend,
+              createdAt: response.message.createdAt,
+              status: response.message.status,
+              replyTo: response.message.replyTo,
+              edited: false,
+              editedAt: null,
+              deletedAt: null,
+              reactions: []
+            };
+            setMessages(prev => [...prev, sentMsg]);
+            setReplyTo(null);
+
+            // Update lastActivityAt in chats and re-sort
+            setChats(prev => {
+              const updated = prev.map(c => {
+                if (c.connectionId === activeChat.connectionId) {
+                  return { ...c, lastActivityAt: response.message.createdAt };
+                }
+                return c;
+              });
+              return [...updated].sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
             });
-            return [...updated].sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
-          });
-        } else {
-          toast.error(response.error || "Failed to send message");
-        }
-      });
-    } catch (err) {
-      console.error("Encryption/Sending failed:", err);
-      toast.error("Encryption failed. Vault locked?");
+          } else {
+            toast.error(response.error || "Failed to send message");
+          }
+        });
+      } catch (err) {
+        console.error("Encryption/Sending failed:", err);
+        toast.error("Encryption failed. Vault locked?");
+      }
     }
   };
 
   // Encrypt and upload media files
-  const handleMediaUpload = async (e) => {
-    const file = e.target.files?.[0];
+  const handleMediaUpload = async (file) => {
     if (!file || !activeChat || !socket) return;
 
     if (!isVaultUnlocked) {
@@ -1379,77 +1432,112 @@ export default function Chats() {
                       )}
 
                       {/* Message Bubble Container */}
-                      <div className="relative">
-                        <div className={`p-3.5 rounded-2xl shadow-sm text-sm leading-relaxed ${
-                          isDeleted
-                            ? "bg-gray-100 text-gray-400 border border-gray-200 italic rounded-2xl"
-                            : isMe 
-                              ? "bg-blue-600 text-white rounded-br-none" 
-                              : "bg-white text-gray-800 border border-gray-100 rounded-bl-none"
-                        }`}>
-                          {isDeleted ? (
-                            <p className="flex items-center gap-1.5 text-xs">
-                              <Trash2 size={13} className="opacity-60" />
-                              This message was deleted
-                            </p>
-                          ) : editingMessage?.id === msg.id ? (
-                            <InlineEdit
-                              initialText={msg.text}
-                              onSave={(text) => handleEditMessage(msg.id, text)}
-                              onCancel={() => setEditingMessage(null)}
-                            />
-                          ) : msg.messageType === "text" ? (
-                            <p className="whitespace-pre-wrap">{msg.text}</p>
-                          ) : msg.mediaMeta ? (
-                            <div className="flex flex-col gap-2 min-w-44">
-                              <div className="flex items-center gap-2 text-xs border-b border-white/10 pb-1.5 font-medium">
-                                <ImageIcon size={14} className={isMe ? "text-blue-200" : "text-gray-400"} />
-                                <span className="truncate">{msg.mediaMeta.filename}</span>
-                              </div>
-                              <DecryptedMedia
-                                mediaUrl={msg.mediaUrl}
-                                fileKey={msg.mediaMeta.fileKey}
-                                iv={msg.mediaMeta.iv}
-                                mimeType={msg.mediaMeta.mimeType}
-                                filename={msg.mediaMeta.filename}
+                      <div className="flex items-center gap-1.5">
+                        {isMe && !isDeleted && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveActionMessage(msg);
+                            }}
+                            className="md:hidden opacity-0 group-hover:opacity-100 touch-device-show p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:bg-gray-200 rounded-full transition-all cursor-pointer flex-shrink-0"
+                            title="Actions"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                        )}
+
+                        <div className="relative">
+                          <div 
+                            onClick={() => {
+                              if (!isDeleted && editingMessage?.id !== msg.id) {
+                                setActiveActionMessage(msg);
+                              }
+                            }}
+                            className={`p-3.5 rounded-2xl shadow-sm text-sm leading-relaxed cursor-pointer ${
+                              isDeleted
+                                ? "bg-gray-100 text-gray-400 border border-gray-200 italic rounded-2xl"
+                                : isMe 
+                                  ? "bg-blue-600 text-white rounded-br-none" 
+                                  : "bg-white text-gray-800 border border-gray-100 rounded-bl-none"
+                            }`}
+                          >
+                            {isDeleted ? (
+                              <p className="flex items-center gap-1.5 text-xs">
+                                <Trash2 size={13} className="opacity-60" />
+                                This message was deleted
+                              </p>
+                            ) : editingMessage?.id === msg.id ? (
+                              <InlineEdit
+                                initialText={msg.text}
+                                onSave={(text) => handleEditMessage(msg.id, text)}
+                                onCancel={() => setEditingMessage(null)}
                               />
+                            ) : msg.messageType === "text" ? (
+                              <p className="whitespace-pre-wrap">{msg.text}</p>
+                            ) : msg.mediaMeta ? (
+                              <div className="flex flex-col gap-2 min-w-44">
+                                <div className="flex items-center gap-2 text-xs border-b border-white/10 pb-1.5 font-medium">
+                                  <ImageIcon size={14} className={isMe ? "text-blue-200" : "text-gray-400"} />
+                                  <span className="truncate">{msg.mediaMeta.filename}</span>
+                                </div>
+                                <DecryptedMedia
+                                  mediaUrl={msg.mediaUrl}
+                                  fileKey={msg.mediaMeta.fileKey}
+                                  iv={msg.mediaMeta.iv}
+                                  mimeType={msg.mediaMeta.mimeType}
+                                  filename={msg.mediaMeta.filename}
+                                />
+                              </div>
+                            ) : (
+                              <p className="italic text-xs text-red-500">Secure attachment metadata unavailable</p>
+                            )}
+                          </div>
+
+                          {/* Reaction Badges on Bubble */}
+                          {msg.reactions && msg.reactions.length > 0 && !isDeleted && (
+                            <div className={`flex flex-wrap items-center gap-1 absolute bottom-[-10px] z-10 ${
+                              isMe ? "right-3" : "left-3"
+                            }`}>
+                              {Object.entries(groupedReactions).map(([emoji, rxList]) => {
+                                const hasMyReaction = rxList.some(r => r.userId === user.id);
+                                const userNamesList = rxList.map(r => r.username).join(", ");
+                                return (
+                                  <button
+                                    key={emoji}
+                                    onClick={() => handleToggleReaction(msg.id, emoji)}
+                                    title={userNamesList}
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border shadow-sm transition-all cursor-pointer ${
+                                      hasMyReaction 
+                                        ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold" 
+                                        : "bg-white border-gray-100 text-gray-500 hover:bg-gray-50"
+                                    }`}
+                                  >
+                                    <span>{emoji}</span>
+                                    {rxList.length > 1 && <span>{rxList.length}</span>}
+                                  </button>
+                                );
+                              })}
                             </div>
-                          ) : (
-                            <p className="italic text-xs text-red-500">Secure attachment metadata unavailable</p>
                           )}
                         </div>
 
-                        {/* Reaction Badges on Bubble */}
-                        {msg.reactions && msg.reactions.length > 0 && !isDeleted && (
-                          <div className={`flex flex-wrap items-center gap-1 absolute bottom-[-10px] z-10 ${
-                            isMe ? "right-3" : "left-3"
-                          }`}>
-                            {Object.entries(groupedReactions).map(([emoji, rxList]) => {
-                              const hasMyReaction = rxList.some(r => r.userId === user.id);
-                              const userNamesList = rxList.map(r => r.username).join(", ");
-                              return (
-                                <button
-                                  key={emoji}
-                                  onClick={() => handleToggleReaction(msg.id, emoji)}
-                                  title={userNamesList}
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border shadow-sm transition-all cursor-pointer ${
-                                    hasMyReaction 
-                                      ? "bg-blue-50 border-blue-200 text-blue-700 font-semibold" 
-                                      : "bg-white border-gray-100 text-gray-500 hover:bg-gray-50"
-                                  }`}
-                                >
-                                  <span>{emoji}</span>
-                                  {rxList.length > 1 && <span>{rxList.length}</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
+                        {!isMe && !isDeleted && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveActionMessage(msg);
+                            }}
+                            className="md:hidden opacity-0 group-hover:opacity-100 touch-device-show p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:bg-gray-200 rounded-full transition-all cursor-pointer flex-shrink-0"
+                            title="Actions"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
                         )}
                       </div>
 
                       {/* Hover Actions Menu */}
                       {!isDeleted && editingMessage?.id !== msg.id && (
-                        <div className={`absolute top-1/2 -translate-y-1/2 flex items-center gap-2 bg-white border border-gray-200 shadow-md py-1 px-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 ${
+                        <div className={`absolute top-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 bg-white border border-gray-200 shadow-md py-1 px-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 ${
                           isMe ? "right-full mr-3" : "left-full ml-3"
                         }`}>
                           {/* Quick Reactions */}
@@ -1567,13 +1655,50 @@ export default function Chats() {
               </div>
             )}
 
+            {/* Selected File (Attachment) Preview */}
+            {selectedFile && (
+              <div className="px-5 py-2.5 border-t border-gray-150 bg-gray-50 flex items-center justify-between transition-all duration-200 animate-fade-in shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {selectedFilePreview ? (
+                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 bg-white flex-shrink-0">
+                      <img src={selectedFilePreview} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-400 flex-shrink-0">
+                      <ImageIcon size={18} />
+                    </div>
+                  )}
+                  <div className="truncate text-xs">
+                    <span className="font-semibold text-gray-700 block truncate max-w-[180px] md:max-w-xs">{selectedFile.name}</span>
+                    <span className="text-gray-400 text-[10px]">{(selectedFile.size / 1024).toFixed(1)} KB • Ready to send securely</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFile(null);
+                    if (selectedFilePreview) {
+                      URL.revokeObjectURL(selectedFilePreview);
+                      setSelectedFilePreview(null);
+                    }
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = "";
+                    }
+                  }}
+                  className="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
             {/* Input Bar */}
             <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200 bg-white shrink-0 flex items-center gap-3">
               {/* Media Upload Trigger */}
               <input
                 type="file"
                 ref={fileInputRef}
-                onChange={handleMediaUpload}
+                onChange={handleFileSelect}
                 className="hidden"
                 disabled={uploadingFile || !isVaultUnlocked}
               />
@@ -1622,6 +1747,120 @@ export default function Chats() {
         )}
       </div>
 
+      {/* Message Actions Bottom Sheet */}
+      {activeActionMessage && (
+        <div 
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-end md:items-center justify-center p-4 z-50 animate-in fade-in duration-200"
+          onClick={() => setActiveActionMessage(null)}
+        >
+          <div 
+            className="bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-2xl shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-300 md:zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 bg-gray-50/50">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Message Actions</span>
+              <button 
+                onClick={() => setActiveActionMessage(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 flex flex-col gap-4">
+              {/* Quick Emojis */}
+              <div className="flex justify-around items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
+                {["👍", "❤️", "😂", "😮", "😢", "🙏"].map(emoji => {
+                  const hasReacted = activeActionMessage.reactions?.some(r => r.userId === user.id && r.emoji === emoji);
+                  return (
+                    <button
+                      key={emoji}
+                      onClick={() => {
+                        handleToggleReaction(activeActionMessage.id, emoji);
+                        setActiveActionMessage(null);
+                      }}
+                      className={`text-2xl hover:scale-125 transition-transform p-1.5 rounded-lg cursor-pointer ${
+                        hasReacted ? "bg-blue-50 border border-blue-200 animate-pulse" : ""
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Action List */}
+              <div className="flex flex-col gap-1">
+                {/* Reply */}
+                <button
+                  onClick={() => {
+                    const msg = activeActionMessage;
+                    const isMe = msg.senderId === user.id;
+                    setReplyTo({
+                      id: msg.id,
+                      text: msg.messageType === "media" ? `📎 File: ${msg.mediaMeta?.filename || "Attachment"}` : msg.text,
+                      senderUsername: getMessageSenderName(msg.senderId),
+                      isMe
+                    });
+                    setActiveActionMessage(null);
+                  }}
+                  className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-gray-50 text-gray-700 rounded-lg text-sm transition-colors cursor-pointer text-left font-medium"
+                >
+                  <Reply size={16} className="text-gray-400 transform scale-x-[-1]" />
+                  Reply to Message
+                </button>
+
+                {/* Copy Text */}
+                {activeActionMessage.messageType === "text" && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeActionMessage.text);
+                      toast.success("Message copied to clipboard!");
+                      setActiveActionMessage(null);
+                    }}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-gray-50 text-gray-700 rounded-lg text-sm transition-colors cursor-pointer text-left font-medium"
+                  >
+                    <Copy size={16} className="text-gray-400" />
+                    Copy Text
+                  </button>
+                )}
+
+                {/* Edit (Sender text message only) */}
+                {activeActionMessage.senderId === user.id && activeActionMessage.messageType === "text" && (
+                  <button
+                    onClick={() => {
+                      setEditingMessage({ id: activeActionMessage.id, text: activeActionMessage.text });
+                      setActiveActionMessage(null);
+                    }}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-gray-50 text-blue-600 rounded-lg text-sm transition-colors cursor-pointer text-left font-medium"
+                  >
+                    <Edit3 size={16} className="text-blue-500" />
+                    Edit Message
+                  </button>
+                )}
+
+                {/* Delete (Sender only) */}
+                {activeActionMessage.senderId === user.id && (
+                  <button
+                    onClick={() => {
+                      setActiveActionMessage(null);
+                      if (confirm("Are you sure you want to delete this message?")) {
+                        handleDeleteMessage(activeActionMessage.id);
+                      }
+                    }}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-red-50 text-red-600 rounded-lg text-sm transition-colors cursor-pointer text-left font-medium"
+                  >
+                    <Trash2 size={16} className="text-red-500" />
+                    Delete Message
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

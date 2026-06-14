@@ -1,1 +1,7 @@
 @import "tailwindcss";
+
+@media (hover: none) {
+  .touch-device-show {
+    opacity: 1 !important;
+  }
+}

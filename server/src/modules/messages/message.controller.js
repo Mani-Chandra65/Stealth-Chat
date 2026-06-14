@@ -4,30 +4,25 @@ import fs from "fs";
 import path from "path";
 import nodemailer from "nodemailer";
 
-const getCloudinaryConfig = () => {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+const isCloudinaryConfigured = !!(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_CLOUD_NAME !== "your_cloudinary_cloud_name_here" &&
+  process.env.CLOUDINARY_CLOUD_NAME !== "your_cloud_name" &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_KEY !== "your_cloudinary_api_key_here" &&
+  process.env.CLOUDINARY_API_KEY !== "your_api_key" &&
+  process.env.CLOUDINARY_API_SECRET &&
+  process.env.CLOUDINARY_API_SECRET !== "your_cloudinary_api_secret_here" &&
+  process.env.CLOUDINARY_API_SECRET !== "your_api_secret"
+);
 
-  const isConfigured = !!(
-    cloudName &&
-    cloudName !== "your_cloudinary_cloud_name_here" &&
-    cloudName !== "your_cloud_name" &&
-    apiKey &&
-    apiKey !== "your_cloudinary_api_key_here" &&
-    apiKey !== "your_api_key" &&
-    apiSecret &&
-    apiSecret !== "your_cloudinary_api_secret_here" &&
-    apiSecret !== "your_api_secret"
-  );
-
-  return {
-    isConfigured,
-    cloudName,
-    apiKey,
-    apiSecret
-  };
-};
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
 
 // Helper to stream upload memory buffers to Cloudinary as raw assets
 const uploadToCloudinary = (fileBuffer) => {
@@ -35,6 +30,7 @@ const uploadToCloudinary = (fileBuffer) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         resource_type: "raw", // Encrypted files have binary headers and must be raw
+        folder: "stealth-chat",
       },
       (error, result) => {
         if (result) {
@@ -72,22 +68,13 @@ export const uploadMedia = async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const config = getCloudinaryConfig();
-
-    if (!config.isConfigured) {
+    if (!isCloudinaryConfigured) {
       console.error("[ADMIN ALERT] Cloudinary is not configured!");
       return res.status(500).json({
         error: "Error on database/storage side. Please wait and try again.",
         code: "STORAGE_NOT_CONFIGURED"
       });
     }
-
-    // Configure Cloudinary dynamically using current environment variables
-    cloudinary.config({
-      cloud_name: config.cloudName,
-      api_key: config.apiKey,
-      api_secret: config.apiSecret,
-    });
 
     // req.file.buffer contains the client-encrypted file bytes
     let fileUrl = "";

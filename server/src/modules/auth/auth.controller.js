@@ -55,7 +55,7 @@ export const login = async (req,res,next) => {
         
         const loginData = await authService.login({ email, passwordHash, deviceName, ipAddress });
         
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
         res.cookie('refreshToken', loginData.refreshToken, {
             httpOnly: true,
             secure: isProduction,
@@ -92,7 +92,7 @@ export const refreshToken = async (req, res, next) => {
             user: data.user
         });
     } catch (error) {
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
         res.clearCookie('refreshToken', {
             httpOnly: true,
             secure: isProduction,
@@ -107,7 +107,7 @@ export const logout = async (req, res, next) => {
         const { refreshToken } = req.cookies;
         
         await authService.logout(refreshToken);
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
         res.clearCookie('refreshToken', {
             httpOnly: true,
             secure: isProduction,
