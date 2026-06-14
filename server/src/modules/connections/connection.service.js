@@ -115,9 +115,10 @@ export const getPending = async (userId) => {
 export const getConnections = async (userId) => {
     const list = await getConnectionsList(userId);
     return list.map(chat => {
+        const isOnline = chat.peerShowOnlineStatus ? onlineUsers.has(chat.peerId) : false;
         return {
             ...chat,
-            isOnline: onlineUsers.has(chat.peerId)
+            isOnline
         };
     });
 };

@@ -37,6 +37,8 @@ export const useRegister = () => {
     } catch (err) {
       // Handle various error formats
       const errorMessage =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
         err.message ||
         err.error ||
         (err.errors ? err.errors.map(e => e.msg).join(', ') : 'Registration failed. Please try again.');

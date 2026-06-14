@@ -12,12 +12,14 @@ export default function UnlockVault({ onUnlock }) {
   const { register, handleSubmit, formState: { errors } } = useForm();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState(null);
   
   // Directly pull user from the global state 
   const user = useAuthStore(state => state.user);
 
   const onSubmit = async (data) => {
     setIsLoading(true);
+    setError(null);
     try {
       if (!user) throw new Error("User session data missing from store");
 
@@ -28,14 +30,20 @@ export default function UnlockVault({ onUnlock }) {
          throw new Error("Encrypted key missing from IndexedDB. Please fully log out and log in again.");
       }
 
-      const cryptoKey = await decryptPrivateKey(encryptedKeyStr, passwordHash);
+      let cryptoKey;
+      try {
+        cryptoKey = await decryptPrivateKey(encryptedKeyStr, passwordHash);
+      } catch (decryptErr) {
+        throw new Error("Incorrect password. Failed to decrypt your private key.");
+      }
       setPrivateKey(cryptoKey);
       
       toast.success('Vault unlocked successfully!');
       onUnlock();
     } catch (err) {
       console.error("Unlock error:", err);
-      toast.error('Incorrect password or corrupted local vault.');
+      setError(err.message);
+      toast.error(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -53,6 +61,12 @@ export default function UnlockVault({ onUnlock }) {
             Your session is active, but your encryption keys have left memory. Please enter your password to unlock your vault.
           </p>
         </div>
+
+        {error && (
+          <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-md font-medium text-center">
+            {error}
+          </div>
+        )}
 
         <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
           <div>

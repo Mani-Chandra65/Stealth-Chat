@@ -46,6 +46,26 @@ export default function Settings() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Active Sessions
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+
+  const fetchSessions = async () => {
+    try {
+      setLoadingSessions(true);
+      const res = await axios.get("/api/v1/users/sessions", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      setSessions(res.data);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to load active sessions");
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -66,6 +86,7 @@ export default function Settings() {
 
     if (accessToken) {
       fetchSettings();
+      fetchSessions();
     }
   }, [accessToken]);
 
@@ -91,6 +112,31 @@ export default function Settings() {
       toast.error(err.response?.data?.error || "Failed to update setting");
     } finally {
       setSavingPreference(null);
+    }
+  };
+
+  const handleRevokeSession = async (sessionId, isCurrent) => {
+    if (isCurrent && !window.confirm("Are you sure you want to log out of your current device session?")) {
+      return;
+    } else if (!isCurrent && !window.confirm("Are you sure you want to revoke this session? The device will be logged out immediately.")) {
+      return;
+    }
+
+    try {
+      await axios.delete(`/api/v1/users/sessions/${sessionId}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      toast.success("Session revoked successfully");
+      if (isCurrent) {
+        await clearAuth();
+        navigate("/login", { replace: true });
+      } else {
+        setSessions((current) => current.filter((s) => s.sessionId !== sessionId));
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to revoke session");
     }
   };
 
@@ -315,6 +361,49 @@ export default function Settings() {
               />
             </div>
           </div>
+        </section>
+
+        <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Logged In Devices</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Manage your active sessions on other browsers or devices.
+          </p>
+
+          {loadingSessions ? (
+            <p className="text-sm text-gray-500">Loading active devices...</p>
+          ) : sessions.length === 0 ? (
+            <p className="text-sm text-gray-500">No active sessions found.</p>
+          ) : (
+            <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden bg-slate-50/20">
+              {sessions.map((s) => (
+                <div key={s.sessionId} className="flex items-center justify-between p-4 gap-4 hover:bg-slate-50/50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-900 truncate">{s.deviceName}</span>
+                      {s.isCurrent && (
+                        <span className="shrink-0 px-2 py-0.5 text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 rounded-full">
+                          Current Device
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      IP: {s.ipAddress} &bull; Last active: {new Date(s.lastActiveAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRevokeSession(s.sessionId, s.isCurrent)}
+                    className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                      s.isCurrent
+                        ? "text-red-600 border-red-200 hover:bg-red-50 bg-white"
+                        : "text-gray-600 border-gray-200 hover:bg-gray-100 bg-white"
+                    }`}
+                  >
+                    {s.isCurrent ? "Log Out" : "Revoke"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">

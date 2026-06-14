@@ -82,12 +82,14 @@ export const getConnectionsList = async (userId) => {
         user1: {
             id: user1.id,
             username: user1.username,
-            profilePicture: user1.profilePicture
+            profilePicture: user1.profilePicture,
+            showOnlineStatus: user1.showOnlineStatus
         },
         user2: {
             id: user2.id,
             username: user2.username,
-            profilePicture: user2.profilePicture
+            profilePicture: user2.profilePicture,
+            showOnlineStatus: user2.showOnlineStatus
         },
         encryptedAESKeyUser1: connections.encrypted_AES_key_user1,
         encryptedAESKeyUser2: connections.encrypted_AES_key_user2
@@ -126,6 +128,7 @@ export const getConnectionsList = async (userId) => {
             peerId: peer.id,
             peerUsername: peer.username,
             peerProfilePicture: peer.profilePicture,
+            peerShowOnlineStatus: peer.showOnlineStatus,
             encryptedAESKey,
             lastActivityAt
         };

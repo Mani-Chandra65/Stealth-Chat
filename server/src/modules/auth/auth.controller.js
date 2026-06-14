@@ -15,7 +15,7 @@ export const register = async (req,res,next)=>{
             }
         });
     } catch (error) {
-        if (error.code === 'EMAIL_EXISTS') {
+        if (error.code === 'EMAIL_EXISTS' || error.code === 'EMAIL_DELETED') {
             return res.status(409).json({
                 success: false,
                 error: error.message,
@@ -23,7 +23,7 @@ export const register = async (req,res,next)=>{
             });
         }
 
-        if (error.code === 'USERNAME_EXISTS') {
+        if (error.code === 'USERNAME_EXISTS' || error.code === 'USERNAME_DELETED') {
             return res.status(409).json({
                 success: false,
                 error: error.message,

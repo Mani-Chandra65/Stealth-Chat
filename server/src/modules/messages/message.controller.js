@@ -2,11 +2,18 @@ import * as messageService from "./message.service.js";
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 import path from "path";
+import nodemailer from "nodemailer";
 
 const isCloudinaryConfigured = !!(
   process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_CLOUD_NAME !== "your_cloudinary_cloud_name_here" &&
+  process.env.CLOUDINARY_CLOUD_NAME !== "your_cloud_name" &&
   process.env.CLOUDINARY_API_KEY &&
-  process.env.CLOUDINARY_API_SECRET
+  process.env.CLOUDINARY_API_KEY !== "your_cloudinary_api_key_here" &&
+  process.env.CLOUDINARY_API_KEY !== "your_api_key" &&
+  process.env.CLOUDINARY_API_SECRET &&
+  process.env.CLOUDINARY_API_SECRET !== "your_cloudinary_api_secret_here" &&
+  process.env.CLOUDINARY_API_SECRET !== "your_api_secret"
 );
 
 if (isCloudinaryConfigured) {
@@ -60,25 +67,27 @@ export const uploadMedia = async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
+    if (!isCloudinaryConfigured) {
+      console.error("[ADMIN ALERT] Cloudinary is not configured!");
+      return res.status(500).json({
+        error: "Error on database/storage side. Please wait and try again.",
+        code: "STORAGE_NOT_CONFIGURED"
+      });
+    }
+
     // req.file.buffer contains the client-encrypted file bytes
     let fileUrl = "";
 
-    if (isCloudinaryConfigured) {
+    try {
       const uploadResult = await uploadToCloudinary(req.file.buffer);
       fileUrl = uploadResult.secure_url;
-    } else {
-      // Local fallback
-      const uploadDir = path.join(process.cwd(), "uploads");
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-      
-      const fileExt = req.file.originalname ? path.extname(req.file.originalname) : ".enc";
-      const filename = `${Date.now()}-${Math.random().toString(36).substring(7)}${fileExt}`;
-      const filePath = path.join(uploadDir, filename);
-      
-      fs.writeFileSync(filePath, req.file.buffer);
-      fileUrl = `${req.protocol}://${req.get("host")}/uploads/${filename}`;
+    } catch (cloudinaryErr) {
+      console.error("[ADMIN ALERT] Cloudinary upload failed:", cloudinaryErr);
+      return res.status(500).json({
+        error: "Error on database/storage side. Please wait and try again.",
+        code: "STORAGE_ERROR",
+        details: cloudinaryErr.message || "Cloudinary upload failed"
+      });
     }
 
     return res.status(200).json({
@@ -88,5 +97,61 @@ export const uploadMedia = async (req, res) => {
   } catch (error) {
     console.error("Media upload error:", error);
     return res.status(500).json({ error: error.message || "Media upload failed" });
+  }
+};
+
+export const reportError = async (req, res) => {
+  try {
+    const { errorDetails, fileName } = req.body;
+    const userId = req.user?.userId || "unknown";
+
+    const logMessage = `[USER REPORTED UPLOAD ERROR] User ID: ${userId}, File: ${fileName || "unknown"}, Error: ${JSON.stringify(errorDetails)}`;
+    console.error(logMessage);
+
+    // If SMTP environment variables are defined, send a real email
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = process.env.SMTP_PORT || 587;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const adminEmail = process.env.ADMIN_EMAIL || "admin@stealthchat.app";
+
+    let emailSent = false;
+    if (smtpHost && smtpHost !== "your_smtp_host_here" && smtpUser && smtpUser !== "your_smtp_user_here" && smtpPass && smtpPass !== "your_smtp_password_here") {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: parseInt(smtpPort),
+          secure: smtpPort == 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass
+          }
+        });
+
+        await transporter.sendMail({
+          from: `"Stealth Chat Alert" <${smtpUser}>`,
+          to: adminEmail,
+          subject: `[ALERT] Stealth Chat Media Upload Failed`,
+          text: `A user encountered a file upload error.\n\nUser ID: ${userId}\nFile: ${fileName || "unknown"}\nError Details:\n${JSON.stringify(errorDetails, null, 2)}`,
+          html: `<h3>Stealth Chat Media Upload Failure</h3>
+                 <p><strong>User ID:</strong> ${userId}</p>
+                 <p><strong>File:</strong> ${fileName || "unknown"}</p>
+                 <p><strong>Error Details:</strong></p>
+                 <pre>${JSON.stringify(errorDetails, null, 2)}</pre>`
+        });
+        emailSent = true;
+      } catch (mailErr) {
+        console.error("Failed to send error email:", mailErr);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Report logged successfully",
+      emailSent
+    });
+  } catch (err) {
+    console.error("Failed to process error report:", err);
+    return res.status(500).json({ error: "Failed to send report" });
   }
 };

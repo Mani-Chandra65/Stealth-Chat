@@ -8,6 +8,8 @@ import {
   updateUserProfile,
   updateUserSettings,
   getUserPublicKeyEndpoint,
+  getActiveSessions,
+  revokeSession,
 } from "./user.controller.js";
 import { authenticate } from "../../middleware/auth.js";
 
@@ -18,6 +20,10 @@ router.get("/settings", authenticate, getUserSettings);
 router.put("/settings", authenticate, updateUserSettings);
 router.put("/settings/email", authenticate, updateUserEmail);
 router.post("/settings/delete-account", authenticate, deleteUserAccount);
+// Active Device Sessions Management
+router.get("/sessions", authenticate, getActiveSessions);
+router.delete("/sessions/:sessionId", authenticate, revokeSession);
+
 // Authenticate the profile fetch so we know who is requesting it
 router.get("/profile/:username", authenticate, getUserProfile);
 router.put("/profile", authenticate, updateUserProfile);

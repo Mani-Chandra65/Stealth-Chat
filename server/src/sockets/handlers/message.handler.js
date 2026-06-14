@@ -1,4 +1,7 @@
 import * as messageService from "../../modules/messages/message.service.js";
+import { db } from "../../db/postgresSQL/index.js";
+import { users } from "../../db/postgresSQL/schema/users.js";
+import { eq } from "drizzle-orm";
 import { 
   messageSendSchema, 
   messageReadSchema, 
@@ -121,18 +124,36 @@ export const registerMessageHandlers = (
 
         const peerId = connection.user1_id === userId ? connection.user2_id : connection.user1_id;
 
-        // Mark messages as read in DB
-        await messageService.markChatAsRead(chatId, userId);
+        // Fetch settings for both participants
+        const [readerSetting] = await db
+          .select({ readReceipts: users.readReceipts })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
 
-        // Notify peer's online sockets
-        const peerSockets = onlineUsers.get(peerId);
-        if (peerSockets) {
-          peerSockets.forEach(socketId => {
-            io.to(socketId).emit("message:read", {
-              chatId,
-              readBy: userId
+        const [peerSetting] = await db
+          .select({ readReceipts: users.readReceipts })
+          .from(users)
+          .where(eq(users.id, peerId))
+          .limit(1);
+
+        const readerReadReceipts = readerSetting ? readerSetting.readReceipts : true;
+        const peerReadReceipts = peerSetting ? peerSetting.readReceipts : true;
+
+        if (readerReadReceipts && peerReadReceipts) {
+          // Mark messages as read in DB
+          await messageService.markChatAsRead(chatId, userId);
+
+          // Notify peer's online sockets
+          const peerSockets = onlineUsers.get(peerId);
+          if (peerSockets) {
+            peerSockets.forEach(socketId => {
+              io.to(socketId).emit("message:read", {
+                chatId,
+                readBy: userId
+              });
             });
-          });
+          }
         }
 
         if (typeof callback === "function") {

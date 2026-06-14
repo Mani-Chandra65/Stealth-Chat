@@ -4,7 +4,9 @@ import { deviceSessions } from "../../db/postgresSQL/schema/deviceSessions.js";
 import { connections } from "../../db/postgresSQL/schema/connections.js";
 import { publicKeys } from "../../db/postgresSQL/schema/publicKeys.js";
 import { db } from "../../db/postgresSQL/index.js";
-import { and, ilike, eq, or } from "drizzle-orm";
+import { and, ilike, eq, or, gt, isNull } from "drizzle-orm";
+import { getIO } from "../../sockets/index.js";
+import { onlineUsers, broadcastPresence } from "../../sockets/handlers/presence.handler.js";
 
 const settingsFields = {
   showLastSeen: users.showLastSeen,
@@ -208,6 +210,15 @@ export const updateUserSettings = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    if (updates.showOnlineStatus !== undefined) {
+      const io = getIO();
+      if (io) {
+        const isActuallyOnline = onlineUsers.has(userId);
+        const broadcastStatus = (updates.showOnlineStatus && isActuallyOnline) ? "online" : "offline";
+        await broadcastPresence(io, userId, broadcastStatus);
+      }
+    }
+
     return res.status(200).json(settings);
   } catch (error) {
     console.error("Update user settings error:", error);
@@ -385,6 +396,80 @@ export const getUserPublicKeyEndpoint = async (req, res) => {
     return res.status(200).json(pkRecord);
   } catch (error) {
     console.error("Get user public key error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getActiveSessions = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const currentSessionId = req.deviceSession?.session_id;
+
+    if (!db) {
+      return res.status(500).json({ error: "Database connection not available" });
+    }
+
+    const sessions = await db
+      .select({
+        sessionId: deviceSessions.session_id,
+        deviceName: deviceSessions.device_name,
+        ipAddress: deviceSessions.ip_address,
+        createdAt: deviceSessions.created_at,
+        lastActiveAt: deviceSessions.last_active_at,
+        expiresAt: deviceSessions.expires_at,
+      })
+      .from(deviceSessions)
+      .where(
+        and(
+          eq(deviceSessions.user_id, userId),
+          isNull(deviceSessions.revoked_at),
+          gt(deviceSessions.expires_at, new Date())
+        )
+      );
+
+    const formattedSessions = sessions.map(s => ({
+      ...s,
+      isCurrent: s.sessionId === currentSessionId
+    }));
+
+    return res.status(200).json(formattedSessions);
+  } catch (error) {
+    console.error("Get active sessions error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const revokeSession = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { sessionId } = req.params;
+
+    if (!db) {
+      return res.status(500).json({ error: "Database connection not available" });
+    }
+
+    const [session] = await db
+      .select()
+      .from(deviceSessions)
+      .where(and(eq(deviceSessions.session_id, sessionId), eq(deviceSessions.user_id, userId)))
+      .limit(1);
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    await db
+      .update(deviceSessions)
+      .set({ revoked_at: new Date() })
+      .where(eq(deviceSessions.session_id, sessionId));
+
+    if (req.deviceSession && req.deviceSession.session_id === sessionId) {
+      res.clearCookie("refreshToken");
+    }
+
+    return res.status(200).json({ success: true, message: "Session revoked successfully" });
+  } catch (error) {
+    console.error("Revoke session error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };

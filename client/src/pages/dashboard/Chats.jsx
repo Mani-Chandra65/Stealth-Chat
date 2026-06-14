@@ -719,9 +719,11 @@ export default function Chats() {
       return;
     }
 
+    let uploadToastId = null;
+
     try {
       setUploadingFile(true);
-      const uploadToastId = toast.loading(`Encrypting and uploading ${file.name}...`);
+      uploadToastId = toast.loading(`Encrypting and uploading ${file.name}...`);
 
       // 1. Encrypt the file locally
       const { encryptedBlob, fileKeyBase64, ivBase64 } = await encryptMediaFile(file);
@@ -757,7 +759,7 @@ export default function Chats() {
         mediaUrl: fileUrl,
         replyTo: replyTo ? replyTo.id : null
       }, (response) => {
-        toast.dismiss(uploadToastId);
+        if (uploadToastId) toast.dismiss(uploadToastId);
         if (response.success) {
           const sentMsg = {
             id: response.message.messageId,
@@ -798,8 +800,51 @@ export default function Chats() {
       });
 
     } catch (err) {
+      if (uploadToastId) toast.dismiss(uploadToastId);
       console.error("Media secure transfer failed:", err);
-      toast.error("Encryption or upload failed");
+      
+      const errorMsg = err.response?.data?.error || "Error on database/storage side. Please wait and try again.";
+      
+      toast.error((t) => (
+        <div className="flex flex-col gap-2 p-1 text-sm text-gray-800">
+          <span className="font-semibold text-red-600">{errorMsg}</span>
+          <div className="flex gap-2 mt-1">
+            <button
+              onClick={async () => {
+                toast.dismiss(t.id);
+                const reportToastId = toast.loading("Sending error report to admin...");
+                try {
+                  await axios.post("/api/v1/messages/report-error", {
+                    errorDetails: {
+                      message: err.message,
+                      status: err.response?.status,
+                      data: err.response?.data,
+                      stack: err.stack
+                    },
+                    fileName: file.name
+                  }, {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                  });
+                  toast.success("Error report sent to developers!", { id: reportToastId });
+                } catch (reportErr) {
+                  console.error("Failed to send error report:", reportErr);
+                  toast.error("Failed to send report. Please email admin directly.", { id: reportToastId });
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-2.5 py-1 rounded transition-colors cursor-pointer"
+            >
+              Report to developers
+            </button>
+            <a
+              href={`mailto:admin@stealthchat.app?subject=Upload%20Error%20Report&body=User%20ID:%20${user.id}%0AFile:%20${encodeURIComponent(file.name)}%0AError:%20${encodeURIComponent(err.message)}`}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded transition-colors border border-gray-300 inline-flex items-center"
+            >
+              Email Support
+            </a>
+          </div>
+        </div>
+      ), { duration: 10000 });
+
     } finally {
       setUploadingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

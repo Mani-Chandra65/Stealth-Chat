@@ -1,4 +1,7 @@
 import {findUserByEmail,findUserByUsername, createUserWithAuth} from './auth.repository.js';
+import { db } from '../../db/postgresSQL/index.js';
+import { users } from '../../db/postgresSQL/schema/users.js';
+import { eq } from 'drizzle-orm';
 
 const registrationConflict = (code, message) => {
     const error = new Error(message);
@@ -7,16 +10,33 @@ const registrationConflict = (code, message) => {
 };
 
 export const register = async ({ user_name, email, passwordHash, publicKey, encryptedPrivateKey }) => {
-    const existingUserByEmail = await findUserByEmail(email);
+    // Check if user exists (even if deleted)
+    const existingUserByEmail = await db.query.users.findFirst({
+        where: (users, { eq }) => eq(users.email, email)
+    });
     if (existingUserByEmail) {
+        if (existingUserByEmail.isDeleted) {
+            throw registrationConflict(
+                'EMAIL_DELETED',
+                'This email is associated with a deleted account. Please contact support to restore it.'
+            );
+        }
         throw registrationConflict(
             'EMAIL_EXISTS',
             'A user with this email already exists. Contact the owner if you think this is a problem.'
         );
     }
 
-    const existingUserByUsername = await findUserByUsername(user_name);
+    const existingUserByUsername = await db.query.users.findFirst({
+        where: (users, { eq }) => eq(users.username, user_name)
+    });
     if (existingUserByUsername) {
+        if (existingUserByUsername.isDeleted) {
+            throw registrationConflict(
+                'USERNAME_DELETED',
+                'This username is associated with a deleted account.'
+            );
+        }
         throw registrationConflict(
             'USERNAME_EXISTS',
             'A user with this username already exists.'
@@ -32,6 +52,19 @@ import { generateToken } from '../../services/jwt.service.js';
 import crypto from 'crypto';
 
 export const login = async ({ email, passwordHash, deviceName, ipAddress }) => {
+    // Check if user exists (even if deleted)
+    const userRecord = await db.query.users.findFirst({
+        where: (users, { eq }) => eq(users.email, email)
+    });
+
+    if (!userRecord) {
+        throw new Error('User does not exist');
+    }
+
+    if (userRecord.isDeleted) {
+        throw new Error('This account has been deleted. Please contact support to restore it.');
+    }
+
     const userAuth = await findUserAuthDetailsByEmail(email);
     
     if (!userAuth) {
