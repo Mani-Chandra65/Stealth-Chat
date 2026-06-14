@@ -367,7 +367,12 @@ export const deleteUserAccount = async (req, res) => {
       .set({ revoked_at: deletedAt })
       .where(eq(deviceSessions.user_id, userId));
 
-    res.clearCookie("refreshToken");
+    const isProduction = process.env.NODE_ENV === "production";
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax"
+    });
     return res.status(200).json({ success: true, message: "Account marked as deleted" });
   } catch (error) {
     console.error("Delete user account error:", error);
@@ -464,7 +469,12 @@ export const revokeSession = async (req, res) => {
       .where(eq(deviceSessions.session_id, sessionId));
 
     if (req.deviceSession && req.deviceSession.session_id === sessionId) {
-      res.clearCookie("refreshToken");
+      const isProduction = process.env.NODE_ENV === "production";
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax"
+      });
     }
 
     return res.status(200).json({ success: true, message: "Session revoked successfully" });

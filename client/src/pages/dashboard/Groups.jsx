@@ -60,8 +60,8 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
       setLoading(true);
       setError(false);
 
-      // Download the encrypted file bytes
-      const response = await axios.get(mediaUrl, {
+      // Download the encrypted file bytes via proxy
+      const response = await axios.get(`/api/v1/messages/download?url=${encodeURIComponent(mediaUrl)}`, {
         responseType: "arraybuffer"
       });
 

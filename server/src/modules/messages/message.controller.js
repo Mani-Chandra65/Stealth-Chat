@@ -155,3 +155,29 @@ export const reportError = async (req, res) => {
     return res.status(500).json({ error: "Failed to send report" });
   }
 };
+
+export const downloadMedia = async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: "URL is required" });
+    }
+
+    const decodedUrl = decodeURIComponent(url);
+
+    // Fetch the file from Cloudinary or external source
+    const response = await fetch(decodedUrl);
+    if (!response.ok) {
+      return res.status(response.status).json({ error: "Failed to retrieve media from storage" });
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader("Content-Type", response.headers.get("content-type") || "application/octet-stream");
+    return res.send(buffer);
+  } catch (err) {
+    console.error("Media download proxy failed:", err);
+    return res.status(500).json({ error: "Failed to download media" });
+  }
+};

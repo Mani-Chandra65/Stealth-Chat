@@ -55,10 +55,11 @@ export const login = async (req,res,next) => {
         
         const loginData = await authService.login({ email, passwordHash, deviceName, ipAddress });
         
+        const isProduction = process.env.NODE_ENV === 'production';
         res.cookie('refreshToken', loginData.refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            secure: isProduction,
+            sameSite: isProduction ? 'none' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000 
         });
 
@@ -91,7 +92,12 @@ export const refreshToken = async (req, res, next) => {
             user: data.user
         });
     } catch (error) {
-        res.clearCookie('refreshToken');
+        const isProduction = process.env.NODE_ENV === 'production';
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'none' : 'lax'
+        });
         res.status(401).json({ success: false, message: 'Invalid refresh token' });
     }
 };
@@ -101,7 +107,12 @@ export const logout = async (req, res, next) => {
         const { refreshToken } = req.cookies;
         
         await authService.logout(refreshToken);
-        res.clearCookie('refreshToken');
+        const isProduction = process.env.NODE_ENV === 'production';
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'none' : 'lax'
+        });
         
         res.status(200).json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
