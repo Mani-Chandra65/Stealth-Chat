@@ -127,11 +127,11 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
           {isFullScreen && (
             <div 
               className="fixed inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 z-50 animate-in fade-in duration-200"
-              onClick={() => setIsFullScreen(false)}
+              onClick={(e) => { e.stopPropagation(); setIsFullScreen(false); }}
             >
               <button 
                 className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2.5 transition-colors cursor-pointer"
-                onClick={() => setIsFullScreen(false)}
+                onClick={(e) => { e.stopPropagation(); setIsFullScreen(false); }}
               >
                 <X size={20} />
               </button>
@@ -175,11 +175,11 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
           {isFullScreen && (
             <div 
               className="fixed inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 z-50 animate-in fade-in duration-200"
-              onClick={() => setIsFullScreen(false)}
+              onClick={(e) => { e.stopPropagation(); setIsFullScreen(false); }}
             >
               <button 
                 className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2.5 transition-colors cursor-pointer"
-                onClick={() => setIsFullScreen(false)}
+                onClick={(e) => { e.stopPropagation(); setIsFullScreen(false); }}
               >
                 <X size={20} />
               </button>

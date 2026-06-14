@@ -14,10 +14,16 @@ export const socketAuthMiddleware = async (socket, next) => {
         const decoded = verifyToken(token);
         
         // Verify that the user has an active, non-revoked session in the database
+        const sessionId = decoded.sessionId;
+        const queryCondition = sessionId
+            ? eq(deviceSessions.session_id, sessionId)
+            : eq(deviceSessions.user_id, decoded.userId);
+
         const sessions = await db.select()
             .from(deviceSessions)
             .where(
                 and(
+                    queryCondition,
                     eq(deviceSessions.user_id, decoded.userId),
                     isNull(deviceSessions.revoked_at),
                     gt(deviceSessions.expires_at, new Date())
@@ -33,6 +39,7 @@ export const socketAuthMiddleware = async (socket, next) => {
             id: decoded.userId,
             userId: decoded.userId,
             username: decoded.username,
+            sessionId: decoded.sessionId,
         };
         socket.deviceSession = sessions[0];
 

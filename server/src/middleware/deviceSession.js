@@ -18,10 +18,16 @@ export const validateDeviceSession = async (req, res, next) => {
         }
 
         // Query the database to check if there is an active session for the authenticated user
+        const sessionId = req.user.sessionId;
+        const queryCondition = sessionId
+            ? eq(deviceSessions.session_id, sessionId)
+            : eq(deviceSessions.user_id, req.user.userId);
+
         const sessions = await db.select()
             .from(deviceSessions)
             .where(
                 and(
+                    queryCondition,
                     eq(deviceSessions.user_id, req.user.userId),
                     isNull(deviceSessions.revoked_at),
                     gt(deviceSessions.expires_at, new Date())

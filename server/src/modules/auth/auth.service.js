@@ -78,21 +78,21 @@ export const login = async ({ email, passwordHash, deviceName, ipAddress }) => {
 
     const { id: userId, username, public_key, encrypted_private_key } = userAuth;
 
-    const accessToken = generateToken({ userId, username });
-
     const refreshToken = crypto.randomBytes(40).toString('hex');
     const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 days refresh 
 
-    await createDeviceSession({
+    const session = await createDeviceSession({
         user_id: userId,
         device_name: deviceName || 'Unknown Device',
         ip_address: ipAddress || 'Unknown IP',
         refresh_token_hash: refreshTokenHash,
         expires_at: expiresAt
     });
+
+    const accessToken = generateToken({ userId, username, sessionId: session.session_id });
 
     return {
         accessToken,
@@ -131,7 +131,7 @@ export const refreshAuthToken = async (refreshToken) => {
     }
 
     // Sign new access token
-    const accessToken = generateToken({ userId: user.id, username: user.username });
+    const accessToken = generateToken({ userId: user.id, username: user.username, sessionId: session.session_id });
 
     return { 
         accessToken,
