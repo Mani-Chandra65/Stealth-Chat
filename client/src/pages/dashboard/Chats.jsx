@@ -35,7 +35,8 @@ import {
   Trash2,
   Smile,
   RefreshCw,
-  ArrowLeft
+  ArrowLeft,
+  Play
 } from "lucide-react";
 
 // Sub-component to download, decrypt, and render media files securely
@@ -43,6 +44,7 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
   const [decryptedUrl, setDecryptedUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   const decryptMedia = async () => {
     try {
@@ -67,11 +69,11 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
     }
   };
 
-  // Auto-decrypt images; other files can be decrypted on click
   const isImage = mimeType?.startsWith("image/");
+  const isVideo = mimeType?.startsWith("video/");
 
   useEffect(() => {
-    if (isImage) {
+    if (isImage || isVideo) {
       decryptMedia();
     }
     return () => {
@@ -102,9 +104,93 @@ function DecryptedMedia({ mediaUrl, fileKey, iv, mimeType, filename }) {
   if (decryptedUrl) {
     if (isImage) {
       return (
-        <div className="rounded-lg overflow-hidden border border-gray-100 max-w-xs shadow-sm bg-white mt-1">
-          <img src={decryptedUrl} alt={filename || "E2EE Attachment"} className="w-full max-h-60 object-cover" />
-        </div>
+        <>
+          <div className="rounded-lg overflow-hidden border border-gray-100 max-w-xs shadow-sm bg-white mt-1 cursor-zoom-in hover:brightness-95 transition-all" onClick={() => setIsFullScreen(true)}>
+            <img src={decryptedUrl} alt={filename || "E2EE Attachment"} className="w-full max-h-60 object-cover" />
+          </div>
+
+          {isFullScreen && (
+            <div 
+              className="fixed inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 z-50 animate-in fade-in duration-200"
+              onClick={() => setIsFullScreen(false)}
+            >
+              <button 
+                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2.5 transition-colors cursor-pointer"
+                onClick={() => setIsFullScreen(false)}
+              >
+                <X size={20} />
+              </button>
+
+              <img 
+                src={decryptedUrl} 
+                alt={filename || "E2EE Attachment"} 
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200" 
+                onClick={(e) => e.stopPropagation()} 
+              />
+
+              <div className="mt-4 flex items-center gap-4 text-white" onClick={(e) => e.stopPropagation()}>
+                <span className="text-sm font-medium opacity-85 truncate max-w-xs">{filename}</span>
+                <a
+                  href={decryptedUrl}
+                  download={filename || "image"}
+                  className="inline-flex items-center gap-1.5 py-1.5 px-3 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors border border-white/10"
+                >
+                  <Download size={14} />
+                  Download
+                </a>
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+
+    if (isVideo) {
+      return (
+        <>
+          <div className="relative rounded-lg overflow-hidden border border-gray-100 max-w-xs shadow-sm bg-white mt-1 cursor-zoom-in hover:brightness-95 transition-all" onClick={() => setIsFullScreen(true)}>
+            <video src={decryptedUrl} className="w-full max-h-60 object-cover" muted playsInline />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-all">
+              <div className="bg-white/80 rounded-full p-2 text-gray-800 shadow-md">
+                <Play size={16} fill="currentColor" />
+              </div>
+            </div>
+          </div>
+
+          {isFullScreen && (
+            <div 
+              className="fixed inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 z-50 animate-in fade-in duration-200"
+              onClick={() => setIsFullScreen(false)}
+            >
+              <button 
+                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2.5 transition-colors cursor-pointer"
+                onClick={() => setIsFullScreen(false)}
+              >
+                <X size={20} />
+              </button>
+
+              <video 
+                src={decryptedUrl} 
+                controls 
+                autoPlay 
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200" 
+                onClick={(e) => e.stopPropagation()} 
+              />
+
+              <div className="mt-4 flex items-center gap-4 text-white" onClick={(e) => e.stopPropagation()}>
+                <span className="text-sm font-medium opacity-85 truncate max-w-xs">{filename}</span>
+                <a
+                  href={decryptedUrl}
+                  download={filename || "video"}
+                  className="inline-flex items-center gap-1.5 py-1.5 px-3 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors border border-white/10"
+                >
+                  <Download size={14} />
+                  Download
+                </a>
+              </div>
+            </div>
+          )}
+        </>
       );
     }
 

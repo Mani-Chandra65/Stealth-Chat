@@ -17,6 +17,7 @@ import { notFound } from './src/middleware/notFound.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 
 const app = express();
+app.set("trust proxy", 1); // Trust Render's reverse proxy
 const server = createServer(app);
 
 initSocket(server);
