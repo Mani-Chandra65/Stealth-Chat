@@ -45,7 +45,7 @@ export const searchUsers = async (req, res) => {
 
 export const getUserProfile = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { username } = req.params.username?.trim();
     const requesterUsername = req.user?.username;
 
     if (!db) {

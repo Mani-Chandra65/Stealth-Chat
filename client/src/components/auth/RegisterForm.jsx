@@ -18,7 +18,7 @@ export default function RegisterForm() {
   const onSubmit = async (data) => {
     try {
       // data.password is passed down; we'll clear it after use in logic if needed
-      await registerUser(data.username, data.email, data.password);
+      await registerUser(data.username.trim(), data.email.trim(), data.password);
       
       // Clear sensitive info from the form
       reset();
