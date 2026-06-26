@@ -322,6 +322,7 @@ export default function Chats() {
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
+  const lastTypingEmitRef = useRef(0);
 
   const privateKey = getPrivateKey();
   const isVaultUnlocked = !!privateKey;
@@ -716,7 +717,14 @@ export default function Chats() {
       }
     };
 
+    const handleRateLimited = (payload) => {
+      toast.error(payload.error || "Rate limit exceeded. Please wait.");
+      // Mark any messages currently in "sending" status as "failed"
+      setMessages(prev => prev.map(m => m.status === "sending" ? { ...m, status: "failed" } : m));
+    };
+
     socket.on("connect", handleConnect);
+    socket.on("error:rate-limited", handleRateLimited);
     socket.on("connection:request-received", handleRequestReceived);
     socket.on("connection:accepted", handleConnectionAccepted);
     socket.on("connection:rejected", handleConnectionRejected);
@@ -731,6 +739,7 @@ export default function Chats() {
 
     return () => {
       socket.off("connect", handleConnect);
+      socket.off("error:rate-limited", handleRateLimited);
       socket.off("connection:request-received", handleRequestReceived);
       socket.off("connection:accepted", handleConnectionAccepted);
       socket.off("connection:rejected", handleConnectionRejected);
@@ -751,13 +760,18 @@ export default function Chats() {
     
     if (!socket || !activeChat) return;
 
-    // Emit typing start
-    socket.emit("typing:start", { chatId: activeChat.connectionId });
+    const now = Date.now();
+    // Emit typing start at most once every 3 seconds (3000ms)
+    if (now - lastTypingEmitRef.current > 3000) {
+      socket.emit("typing:start", { chatId: activeChat.connectionId });
+      lastTypingEmitRef.current = now;
+    }
 
     // Debounce typing stop
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       socket.emit("typing:stop", { chatId: activeChat.connectionId });
+      lastTypingEmitRef.current = 0; // reset so next keypress immediately sends typing:start
     }, 2000);
   };
 

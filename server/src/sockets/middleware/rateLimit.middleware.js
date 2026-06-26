@@ -2,7 +2,7 @@
 const eventRates = new Map();
 
 const WINDOW_MS = 10000; // 10 seconds sliding window
-const MAX_EVENTS = 30;   // Max 30 event emits allowed in window
+const MAX_EVENTS = 100;  // Max 100 event emits allowed in window
 
 /**
  * Socket.io middleware to intercept and rate-limit client event emissions.
@@ -12,6 +12,13 @@ export const socketRateLimitMiddleware = (socket, next) => {
     const originalOnEvent = socket.onevent;
 
     socket.onevent = function (packet) {
+        const eventName = packet.data?.[0];
+        // Exclude typing indicator events from rate limiting
+        if (eventName && eventName.startsWith("typing:")) {
+            originalOnEvent.call(this, packet);
+            return;
+        }
+
         const socketId = socket.id;
         const now = Date.now();
 
