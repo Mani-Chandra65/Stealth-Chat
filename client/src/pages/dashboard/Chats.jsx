@@ -709,6 +709,14 @@ export default function Chats() {
       }
     };
 
+    const handleConnect = () => {
+      console.log("[Socket] Connected / Reconnected. Syncing messages...");
+      if (activeChat) {
+        loadChatMessages(activeChat);
+      }
+    };
+
+    socket.on("connect", handleConnect);
     socket.on("connection:request-received", handleRequestReceived);
     socket.on("connection:accepted", handleConnectionAccepted);
     socket.on("connection:rejected", handleConnectionRejected);
@@ -722,6 +730,7 @@ export default function Chats() {
     socket.on("message:reacted", handleMessageReacted);
 
     return () => {
+      socket.off("connect", handleConnect);
       socket.off("connection:request-received", handleRequestReceived);
       socket.off("connection:accepted", handleConnectionAccepted);
       socket.off("connection:rejected", handleConnectionRejected);
@@ -804,6 +813,27 @@ export default function Chats() {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       socket.emit("typing:stop", { chatId: activeChat.connectionId });
 
+      // Generate a temporary ID for the optimistic message
+      const tempId = `optimistic-${Date.now()}`;
+      const optimisticMsg = {
+        id: tempId,
+        senderId: user.id,
+        messageType: "text",
+        text: textToSend,
+        createdAt: new Date().toISOString(),
+        status: "sending",
+        replyTo: replyTo ? replyTo.id : null,
+        edited: false,
+        editedAt: null,
+        deletedAt: null,
+        reactions: []
+      };
+
+      // Add the message optimistically to the UI and clear reply state
+      setMessages(prev => [...prev, optimisticMsg]);
+      const currentReplyTo = replyTo;
+      setReplyTo(null);
+
       try {
         // Encrypt message locally using AES symmetric key
         const ciphertext = await encryptMessageContent(textToSend, activeChat.connectionId);
@@ -813,7 +843,7 @@ export default function Chats() {
           chatId: activeChat.connectionId,
           ciphertext,
           messageType: "text",
-          replyTo: replyTo ? replyTo.id : null
+          replyTo: currentReplyTo ? currentReplyTo.id : null
         }, (response) => {
           if (response.success) {
             const sentMsg = {
@@ -829,8 +859,9 @@ export default function Chats() {
               deletedAt: null,
               reactions: []
             };
-            setMessages(prev => [...prev, sentMsg]);
-            setReplyTo(null);
+            
+            // Replace the optimistic message with the server's confirmed message
+            setMessages(prev => prev.map(m => m.id === tempId ? sentMsg : m));
 
             // Update lastActivityAt in chats and re-sort
             setChats(prev => {
@@ -843,11 +874,15 @@ export default function Chats() {
               return [...updated].sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
             });
           } else {
+            // Mark optimistic message as failed
+            setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "failed" } : m));
             toast.error(response.error || "Failed to send message");
           }
         });
       } catch (err) {
         console.error("Encryption/Sending failed:", err);
+        // Mark optimistic message as failed
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "failed" } : m));
         toast.error("Encryption failed. Vault locked?");
       }
     }
@@ -894,13 +929,40 @@ export default function Chats() {
 
       const ciphertext = await encryptMessageContent(metadataPayload, activeChat.connectionId);
 
+      // Generate a temporary ID for the optimistic media message
+      const tempId = `optimistic-${Date.now()}`;
+      const optimisticMsg = {
+        id: tempId,
+        senderId: user.id,
+        messageType: "media",
+        mediaMeta: {
+          fileKey: fileKeyBase64,
+          iv: ivBase64,
+          filename: file.name,
+          mimeType: file.type
+        },
+        mediaUrl: fileUrl,
+        createdAt: new Date().toISOString(),
+        status: "sending",
+        replyTo: replyTo ? replyTo.id : null,
+        edited: false,
+        editedAt: null,
+        deletedAt: null,
+        reactions: []
+      };
+
+      // Add the media message optimistically to the UI and clear reply state
+      setMessages(prev => [...prev, optimisticMsg]);
+      const currentReplyTo = replyTo;
+      setReplyTo(null);
+
       // 4. Send message to chat
       socket.emit("message:send", {
         chatId: activeChat.connectionId,
         ciphertext,
         messageType: "media",
         mediaUrl: fileUrl,
-        replyTo: replyTo ? replyTo.id : null
+        replyTo: currentReplyTo ? currentReplyTo.id : null
       }, (response) => {
         if (uploadToastId) toast.dismiss(uploadToastId);
         if (response.success) {
@@ -923,8 +985,9 @@ export default function Chats() {
             deletedAt: null,
             reactions: []
           };
-          setMessages(prev => [...prev, sentMsg]);
-          setReplyTo(null);
+          
+          // Replace the optimistic message with the server's confirmed message
+          setMessages(prev => prev.map(m => m.id === tempId ? sentMsg : m));
           toast.success("Secure attachment sent!");
 
           // Update lastActivityAt in chats and re-sort
@@ -938,6 +1001,8 @@ export default function Chats() {
             return [...updated].sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
           });
         } else {
+          // Mark optimistic message as failed
+          setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "failed" } : m));
           toast.error(response.error || "Failed to send attachment info");
         }
       });
@@ -1605,7 +1670,11 @@ export default function Chats() {
                         )}
                         {isMe && !isDeleted && (
                           <span>
-                            {msg.status === "read" ? (
+                            {msg.status === "sending" ? (
+                              <Clock size={13} className="text-gray-400 animate-pulse" />
+                            ) : msg.status === "failed" ? (
+                              <AlertCircle size={13} className="text-red-500" />
+                            ) : msg.status === "read" ? (
                               <CheckCheck size={13} className="text-blue-500" />
                             ) : msg.status === "delivered" ? (
                               <CheckCheck size={13} className="text-gray-400" />
